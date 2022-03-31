@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+
+  <h2>SAFE Profile</h2>
+  <h2>Locations</h2>
+  <h3>{{ userole }}: {{ nwieid }}</h3>
+
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for message in messages %}
+      <center><font style="color: red; background-color: black; font-size: large;">{{ message }}</font></center>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+  <form action="" method="POST">
+    <b>Locations:</b>
+    &nbsp;<input type=submit name="form_submit" class="btn-red" formaction="/modlocations" value=Remove>
+    &nbsp; <b>checked Locations or </b>
+    &nbsp;<input type=submit name="form_submit" class="btn-green" formaction="/modlocations" value=Add>
+    &nbsp; <b>New Location</b>
+  <table id="locationtable" class="hoverTable">
+    <tr><th></th><th>Name of Location</th><th>Zip Code</th></tr>
+    {% for item in locinfo %}
+      <tr><td><input type=checkbox name=loclist value="{{item['M']['name']['S']}}" > </td><td>{{item['M']['name']['S']}}</td><td>{{item['M']['zip']['S']}}</td></tr>
+    {% endfor %}
+    <tr><td>Add<td><input type="text" name="name"></td><td><input type="text" name="zip"> </td></tr>
+  </table>
+  </form>
+
+{% endblock %}

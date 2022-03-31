@@ -1,0 +1,9 @@
+{
+    "Parameters": {
+        "pOwner": {"Fn::GetParam": ["Source", "CodePipeline.json", "pOwner"]},
+        "pEmail": {"Fn::GetParam": ["Source", "CodePipeline.json", "pEmail"]},
+        "pResourceName": {"Fn::GetParam": ["Source", "CodePipeline.json", "pResourceName"]},
+        "pCname": "services",
+        "pCommonName": "services.data.ohio.gov"
+  }
+}

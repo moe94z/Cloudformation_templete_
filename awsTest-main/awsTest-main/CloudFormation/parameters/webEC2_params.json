@@ -1,0 +1,17 @@
+{
+    "Parameters": {
+        "pOwner": {"Fn::GetParam": ["Source", "CodePipeline.json", "pOwner"]},
+        "pEmail": {"Fn::GetParam": ["Source", "CodePipeline.json", "pEmail"]},
+        "pResourceName": {"Fn::GetParam": ["Source", "CodePipeline.json", "pResourceName"]},
+        "pKMSid": {"Fn::GetParam": ["KMS_ID", "S3Output.json", "oKMS"]},
+        "pWebRole": {"Fn::GetParam": ["KMS_ID", "S3Output.json", "oPortalRole"]},
+        "pALBarn": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "oALB"]},
+        "pLBSecurityGroup": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "oALBSG"]},
+        "pLBSGID": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "oALBSGID"]},
+        "pWebListener": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "oWebListener"]},
+        "pCname": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "oCname"]},
+        "pCommonName": {"Fn::GetParam": ["Deploy_ALB", "ALBOutput.json", "op-CommonName"]},
+        "pKeyPair": "",
+        "pInstanceType": "m4.large"
+  }
+}

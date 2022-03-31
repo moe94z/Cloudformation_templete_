@@ -1,0 +1,171 @@
+Description: Creates an S3 bucket with an associated KMS key
+Parameters:
+   pOwner:
+    Description: Owner's Name
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+  pEmail:
+    Description: Owner's e-Mail'
+    AllowedPattern: ^([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,3})?$
+    Type: String
+  pResourceName:
+    Description: Name for the Resource
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+
+  pTimestamp:
+    Description: Timestamp for current build
+    Type: String
+  pSourceBucket:
+    Description: Name of bucket containing zipped lambda
+    Type: String
+  pPipelineName:
+    Description: Name of pipeline
+    Type: String
+
+  pActionRole:
+    Description: pipeline action role
+    Type: String
+
+Resources:
+  rS3Bucket:
+    Type: "AWS::S3::Bucket"
+    DependsOn:
+    - rwebEC2Role
+    Properties:
+      BucketName: !Sub ${pResourceName}-S3-${AWS::Region}-${AWS::AccountId}
+      Tags:
+      - Key: Owner
+        Value: !Ref pOwner
+      - Key: Email
+        Value: !Ref pEmail
+      - Key: ResourceName
+        Value: !Sub ${pResourceName}-S3-${AWS::Region}-${AWS::AccountId}
+
+  rS3BucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref rS3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: SSEAndSSLPolicy
+        Statement:
+        - Sid: s3Access
+          Action:
+          - s3:*
+          Principal:
+            AWS: !GetAtt rwebEC2Role.Arn
+          Resource: 
+             - !Sub "arn:aws:s3:::${rS3Bucket}/*"
+             - !Sub "arn:aws:s3:::${rS3Bucket}"
+          Effect: Allow
+
+  rwebEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${pResourceName}-webEC2-role-${AWS::Region}-${AWS::AccountId}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              - !Sub ${AWS::AccountId}
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2FullAccess
+        - arn:aws:iam::aws:policy/AmazonElasticFileSystemFullAccess
+
+  rwebEC2RolePolicy:
+    Type: 'AWS::IAM::Policy'
+    DependsOn:
+    - rProductKmsKeyParam
+    - rS3Bucket
+    - rProductBucketPolicy
+    Properties:
+      PolicyName: webEC2RolePolicy
+      Roles:
+      - !Ref rwebEC2Role
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Sid: s3Access
+          Action:
+          - s3:*
+          Resource: 
+             - !Sub "arn:aws:s3:::${rS3Bucket}/*"
+             - !Sub "arn:aws:s3:::${rS3Bucket}"
+          Effect: Allow
+        - Sid: KMSAccess
+          Action:
+          - kms:*
+          Resource: 
+          - !Sub "arn:aws:s3:::${rS3Bucket}"
+          Effect: Allow
+        - Sid: CloudWatchAccess
+          Action:
+          - "cloudwatch:PutMetricAlarm"
+          - "cloudwatch:DescribeAlarms"
+          - "cloudwatch:DeleteAlarms"
+          - "cloudwatch:GetMetricData"
+          - "cloudwatch:GetMetricStatistics"
+          - "cloudwatch:ListMetrics"
+          - "cloudwatch:PutMetricData"
+          Effect: Allow
+          Resource: "*"
+
+  rS3KmsKeyParam:
+    Type: AWS::KMS::Key
+    Properties:
+      Enabled: true
+      EnableKeyRotation: false
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+                - !Sub "arn:aws:iam::${AWS::AccountId}:role/${pActionRole}"
+            Action: kms:*
+            Resource: '*'
+          - Sid: allow instant profile key access
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt rwebEC2Role.Arn
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+              - kms:GetKeyPolicy
+              - kms:PutKeyPolicy
+            Resource: '*'
+
+  rS3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${pResourceName}-kms-${AWS::Region}-${AWS::AccountId}"
+      TargetKeyId: !Ref rS3KmsKeyParam
+
+  EmptyS3Bucket:
+    Type: Custom::emptyS3bucket
+    Properties:
+      ServiceToken: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${pResourceName}-EmptyS3Lambda-${AWS::Region}-${AWS::AccountId}
+      BucketName: !Ref rS3Bucket
+      RoleName: !Ref rwebEC2Role
+    DependsOn: rS3Bucket
+
+Outputs:
+  oKMS:
+    Value: !Ref rS3KmsKeyParam
+    Description: KMS Key ID
+  oPwebEC2Role:
+    Value: !Ref rwebEC2Role
+    Description: Role for web EC2

@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block content %}
+
+  <h2>Configuration Page</h2>
+  <h2>TBD this could be the config page</h2>
+
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for message in messages %}
+      <center><font style="color: red; background-color: black; font-size: large;">{{ message }}</font></center>
+    {% endfor %}
+  {% endif %}
+  {% endwith %}
+ 
+
+{% endblock %}
