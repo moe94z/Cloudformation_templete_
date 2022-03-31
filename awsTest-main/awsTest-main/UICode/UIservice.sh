@@ -6,8 +6,8 @@
 # description: This script starts and stops the Simple UI Environment Script
 #
 # Author: Mohamad Quteifan
-# Created: 03-13-2022
-# Updated: 03-13-2022
+# Created: 03-31-2022
+# Updated: 03-31-2022
 #
 # Activate Environment
 #
