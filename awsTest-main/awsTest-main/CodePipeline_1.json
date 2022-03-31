@@ -1,0 +1,30 @@
+[
+    {
+        "ParameterKey": "pOwner",
+        "ParameterValue": "Mohamad Quteifan"
+    },
+    {
+        "ParameterKey": "pOwner",
+        "ParameterValue": "Mohamad Quteifan"
+    },
+    {
+        "ParameterKey": "pResourceName",
+        "ParameterValue": "Test"
+    },
+    {
+        "ParameterKey": "pRegion",
+        "ParameterValue": "us-east-1"
+    },
+    {
+        "ParameterKey": "pRootDir",
+        "ParameterValue": "CloudFormation"
+    },
+    {
+        "ParameterKey": "pCodePipelineServiceRole",
+        "ParameterValue": "codebuild-awsTest-service-role"
+    },
+    {
+        "ParameterKey": "pCodePipelineActionRole",
+        "ParameterValue": "codepipeline-action-role"
+    }
+] 
