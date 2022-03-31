@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block content %}
+
+  <h2>Administration Screen</h2>
+  <h2>Allowed User Groups</h2>
+  <h3>{{ userole }}: {{ nwieid }}</h3>
+
+  <form action="" method="POST">
+    <b>AD Groups:</b> 
+    &nbsp;<input type=submit name="form_submit" class="btn-red" formaction="/modusergroups" value=Remove>
+    &nbsp; <b>Checked Groups or </b>
+    &nbsp;<input type=submit name="form_submit" class="btn-green" formaction="/modusergroups" value=Add>
+    &nbsp; <b>New Groups</b>
+  <table id="grouptable" class="hoverTable">
+    <tr><th></th><th>Description</th><th>Value</th></tr>
+    {% for item in adgrps %}
+      <tr><td><input type=checkbox name=grplist value="{{item['Text']}}" > </td><td>{{item['Text']}}</td><td>{{item['Value']}}</td></tr>
+    {% endfor %}
+    <tr><td>Add<td><input type="text" name="text"></td><td><input type="text" name="value"> </td></tr>
+  </table>
+  </form>
+
+{% endblock %}

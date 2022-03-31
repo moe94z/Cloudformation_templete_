@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates Empty S3 Lambda and role it needs
+Parameters:
+   pOwner:
+    Description: Owner's Name
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+  pEmail:
+    Description: Owner's e-Mail'
+    AllowedPattern: ^([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,3})?$
+    Type: String
+  pResourceName:
+    Description: Name for the Resource
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+
+  pTimestamp:
+    Description: Timestamp for current build
+    Type: String
+  pSourceBucket:
+    Description: Name of bucket containing zipped lambda
+    Type: String
+  pPipelineName:
+    Description: Name of pipeline
+    Type: String
+
+  pActionRole:
+    Description: pipeline action role
+    Type: String
+
+Resources:
+  rLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${pResourceName}-EmptyS3Lambda-role-${AWS::Region}-${AWS::AccountId}
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              AWS: !Sub ${AWS::AccountId}
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: !Sub ${pResourceName}-EmptyS3Lambda-policy-${AWS::Region}-${AWS::AccountId}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            -
+              Action:
+                - 'logs:CreateLogGroup'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Effect: Allow
+              Resource: "*"
+
+  rEmptyS3Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: main.lambda_handler
+      Runtime: python3.7
+      Code:
+        S3Bucket: !Ref pSourceBucket
+        S3Key: !Sub ${pPipelineName}/artifacts/${pTimestamp}/EmptyS3Lambda.zip
+      FunctionName: !Sub ${pResourceName}-EmptyS3Lambda-${AWS::Region}-${AWS::AccountId}
+      Timeout: 300
+      Role: !GetAtt rLambdaRole.Arn
+      Tags:
+      - Key: Owner
+        Value: !Ref pOwner
+      - Key: Email
+        Value: !Ref pEmail
+      - Key: ResourceName
+        Value: !Sub ${pResourceName}-S3-${AWS::Region}-${AWS::AccountId}
+
+Outputs:
+  oLambdaRole:
+    Value: !GetAtt rLambdaRole.Arn
+    Description: Lambda Role ARN  

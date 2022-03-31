@@ -1,0 +1,27 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - GIT_HASH=$(git rev-parse --short HEAD)
+      - FILES=$(git diff-tree --no-commit-id --name-only -r ${GIT_HASH} |tr '\n' ' ')
+      - echo "{\"dynamodb.githash\":\"${GIT_HASH}\", \"dynamodb.files_changed\":\"${FILES}\"}" > manifest.json
+
+  build:
+    commands:
+      - |
+        CODEBUILD_GIT_BRANCH=`git symbolic-ref HEAD --short 2>/dev/null`
+        echo "$CODEBUILD_GIT_BRANCH"
+        if [ "$CODEBUILD_GIT_BRANCH" = "" ] ; then
+          CODEBUILD_GIT_BRANCH=`git branch -a --contains HEAD | sed -n 2p | awk '{ printf $1 }'`
+          CODEBUILD_GIT_BRANCH=${CODEBUILD_GIT_BRANCH#remotes/origin/}
+        fi
+        echo "==> CODEBUILD_GIT_BRANCH = $CODEBUILD_GIT_BRANCH "
+        echo "==> BRANCH = $BRANCH "
+        if [ "$CODEBUILD_GIT_BRANCH" = "$BRANCH" ] ; then
+                # Run script to deploy changes into source bucket
+                python /tmp/COMMON/deploy/deploy_app.py
+        fi
+  post_build:
+    commands:
+      - echo "build completed on `date`"

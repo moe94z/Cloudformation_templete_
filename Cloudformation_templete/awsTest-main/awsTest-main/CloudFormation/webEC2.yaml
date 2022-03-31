@@ -1,0 +1,450 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploys an EC2 instance.
+
+Parameters:
+  pOwner:
+    Description: Owner's Name
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+  pEmail:
+    Description: Owner's e-Mail'
+    AllowedPattern: ^([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,3})?$
+    Type: String
+  pResourceName:
+    Description: Name for the Resource
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+
+  pKMSid:
+    Description: CMK for S3 bucket
+    Type: String
+  pWebRole:
+    Description: Web Role
+    Type: String
+  pALBarn:
+    Type: String
+    Description: Arn of ALB
+  pLBSecurityGroup:
+    Type: String
+    Description: ALB Security Group
+  pLBSGID:
+    Type: String
+    Description: ALB Security Group ID
+  pWebListener:
+    Type: String
+    Description: Web Listener
+
+  pCname:
+    Type: String
+    Description: Cname to create in DNS (friendlyname)
+  pCommonName:
+    Type: String
+    Description: Name of the certificate to create (friendlyname.aws.e1.nwie.net)
+
+  pKeyPair:
+    Type: String
+    Default: ""
+  pInstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.medium
+    AllowedValues:
+    - t2.medium
+    - t2.large
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - m4.large
+    - m4.xlarge
+    - m4.2xlarge
+    - m4.4xlarge
+    - m4.10xlarge
+    - m5.large
+    - m5.xlarge
+    - m5.2xlarge
+    - m5.4xlarge
+    - m5.8xlarge
+    - m5.12xlarge
+    - m5.16xlarge
+    - m5.24xlarge
+    - m5a.large
+    - m5a.xlarge
+    - m5a.2xlarge
+    - m5a.4xlarge
+    - m5a.8xlarge
+    - m5a.12xlarge
+    - m5a.16xlarge
+    - m5a.24xlarge
+    - c1.medium
+    - c1.xlarge
+    - c3.large
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - c4.large
+    - c4.xlarge
+    - c4.2xlarge
+    - c4.4xlarge
+    - c4.8xlarge
+    - g2.2xlarge
+    - g2.8xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - d2.xlarge
+    - d2.2xlarge
+    - d2.4xlarge
+    - d2.8xlarge
+    - hs1.8xlarge
+    - cr1.8xlarge
+    - cc2.8xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+
+Conditions:
+  cKeyName: !Not [ !Equals [!Ref pKeyPair, ""] ]
+
+Resources:
+  rEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${pResourceName}-webEC2-IP-${AWS::Region}-${AWS::AccountId}
+      Path: "/"
+      Roles:
+        - !Ref pWebRole
+
+  rGetLatestAMI:
+    Type: Custom::GetLatestAMI
+    Properties:
+      ServiceToken: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ExecuteCustomResource"
+      CustomResourceName: get-latest-encrypted-ami
+      AMI_Name: NWLinux7
+      Encrypted: true
+
+  rWebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${pResourceName}-webEC2-SG-${AWS::Region}-${AWS::AccountId}
+      GroupDescription: "Security group for Analytic Labs"
+      VpcId: !ImportValue oVPCID
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 192.168.0.0/16
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 172.16.0.0/12
+
+  rWebSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref rWebSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref pLBSecurityGroup
+
+  rEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref pInstanceType
+      IamInstanceProfile: !Ref rEC2InstanceProfile
+      SecurityGroupIds:
+        - !Ref rWebSecurityGroup
+        - !ImportValue ToolsAccessSG
+      ImageId: !GetAtt rGetLatestAMI.AMI_ID
+      SubnetId: !ImportValue oPrivateSubnetA
+      KeyName:
+        Fn::If:
+        - cKeyName
+        - !Ref pKeyPair
+        - !Ref AWS::NoValue
+      Tags:
+                - Key: Owner
+                  Value: !Ref pOwner
+                - Key: Email
+                  Value: !Ref pEmail
+                - Key: ResourceName
+                  Value: !Sub ${pResourceName}-DynamoDBServiceTable-${AWS::Region}-${AWS::AccountId}
+
+
+        - Key: Name
+          Value: !Sub ${pResourceName}-webEC2-${AWS::Region}-${AWS::AccountId}
+        - Key: ResourceName
+          Value: !Sub ${pResourceName}-webEC2-${AWS::Region}-${AWS::AccountId}
+        - Key: APRMID
+          Value: !Ref pAPRMID
+        - Key: DataClassification
+          Value: !Ref pDataClassification
+        - Key: ResourceOwner
+          Value: !Sub ${pResourceOwner}@nationwide.com
+        - Key: DisbursementCode
+          Value: !Ref pDisbursementCode
+        - Key: PowerOnInstanceAt
+          Value: !Ref pPowerOnInstanceAt
+        - Key: ShutDownInstanceAt
+          Value: !Ref pShutDownInstanceAt
+        - Key: Patch
+          Value: !Ref pPatch
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -x
+            #run as root
+            sudo -s
+
+            # Set log file location
+            LOGFILE="/var/log/user-data.log"
+
+            #update yum
+            yum update -y
+
+            #make a new flask app directory
+            mkdir /AnalyticLabPortalService
+
+            #create pip.conf and have pip repo point to nexus
+            cd /root/.config
+            mkdir pip
+            cd pip
+            cat <<EOF > pip.conf
+            [global]
+            index-url = https://art.nwie.net/artifactory/api/pypi/pypi/simple
+            EOF
+
+            #create new virtual env
+            cd /AnalyticLabPortalService/
+            python3 -m venv AnalyticLabPortalServiceEnv >> $LOGFILE
+
+            #activate virtual environment
+            source AnalyticLabPortalServiceEnv/bin/activate >> $LOGFILE
+
+            #upgrade pip
+            pip install --upgrade pip --trusted-host repo.nwie.net >> $LOGFILE
+
+            #
+            # Needed for nwiepy
+            #
+            yum groupinstall "Development tools" -y
+            yum install openldap-devel python3-devel -y
+
+            #
+            # now the pip installs
+            #
+            pip install flask >> $LOGFILE
+            pip install nwiepy==1.0.3 >> $LOGFILE
+            #pip install nwiepy==0.2.10 >> $LOGFILE
+            pip install requests
+            pip install Fernet
+            pip install cryptography
+            pip install boto3
+            pip install pandas
+            pip install openpyxl
+            pip install xlsxwriter
+            pip install xlwt
+            pip install xlrd==1.1.0
+
+            #Clone Self-service-analytics repo
+            mkdir /lab
+            git clone https://github.nwie.net/Nationwide/Self-Service-Analytics /lab/Self-Service-Analytics
+
+            # Make all portal scripts executable.
+            chmod +x /lab/Self-Service-Analytics/PortalScripts/*
+
+            # Make upload directory
+            cd /lab
+            mkdir upload
+            chmod a+rwx upload
+
+            echo "*** Updating configuration file with deployment specific variables ***" >> $LOGFILE
+            date >> $LOGFILE
+            cd /lab/Self-Service-Analytics/PortalCode/app/
+            echo -e "\n" >> portal.config
+            echo "YAML_KEY        = 'LabInstances/Build/${pLAB}'" >> portal.config
+            echo "PORTAL_BUCKET   = 'alps-s3-${AWS::Region}-${AWS::AccountId}'" >> portal.config
+            echo "LAB_KEYPAIR     = '${pKeyPair}'" >> portal.config
+            echo "LAB_ENVIRONMENT = '${pEnvironment}'" >> portal.config
+            echo "LOAD_BALANCER   = '${pCommonName}'" >> portal.config
+            echo "ALB_SECURITY_GP = '${pLBSGID}'" >> portal.config
+            echo "HTTPS_LISTENER  = '${pWebListener}'" >> portal.config
+            echo "ADMIN_GROUP     = '${pAdminGroup}'" >> portal.config
+            echo "S3_ACCESS_ADMIN = '${pS3AccessGroup}'" >> portal.config
+            echo "KMS_ID          = '${pKMSid}'" >> portal.config
+
+            echo "*** Creating .aws/config to allow copying of lab installation/config to s3 in deployed account ***" >> $LOGFILE
+            date >> $LOGFILE
+            cd /root
+            mkdir .aws
+            echo "[default]"           > .aws/config
+            echo "region = us-east-1" >> .aws/config
+            export PATH="$PATH:/usr/local/bin"
+
+            echo "*** Copying lab installation/configuration data to S3 ***" >> "$LOGFILE"
+            date >> "$LOGFILE"
+            aws s3 cp /lab/Self-Service-Analytics/LabInstances/ s3://alps-s3-${AWS::Region}-${AWS::AccountId}/LabInstances/ --sse aws:kms --sse-kms-key-id ${pKMSid} --recursive >> "$LOGFILE"
+            aws s3 cp /lab/Self-Service-Analytics/PortalLambdas/ZippedLambdas/ s3://alps-s3-${AWS::Region}-${AWS::AccountId}/ZippedLambdas/ --sse aws:kms --sse-kms-key-id ${pKMSid} --recursive >> "$LOGFILE"
+
+            # create backup directores for portal and labs in S3
+            cd /lab/Self-Service-Analytics
+            mkdir PortalData
+            cd PortalData
+            mkdir Logs
+            mkdir OldUsers
+            mkdir PortalConfig
+            mkdir UserData
+            aws s3 cp /lab/Self-Service-Analytics/PortalData s3://alps-s3-${AWS::Region}-${AWS::AccountId}/ --sse aws:kms --sse-kms-key-id ${pKMSid} --recursive >> "$LOGFILE"
+
+            # Copy portal code to app in /AnalyticLabPortalService
+            cd /
+            cp -r /lab/Self-Service-Analytics/PortalCode/. /AnalyticLabPortalService
+
+            # Symbolically link start script to root and /etc/init.d directories.
+            ln --symbolic /lab/Self-Service-Analytics/PortalScripts/AnalyticLabPortalService.sh /
+            ln --symbolic /lab/Self-Service-Analytics/PortalScripts/AnalyticLabPortalService.sh /etc/init.d/
+
+            # Make work in init.d
+            chkconfig --add AnalyticLabPortalService.sh
+            chkconfig AnalyticLabPortalService.sh on
+
+            #
+            # Define url names for ALPS to be used for cert & dns?
+            alpsip=$(hostname -I)
+            alpshost=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/hostname )
+            #alpsurl="alps-${pEnvironment}.aws.e1.nwie.net"
+            alpsurl="${pEnvironment}-alps.aws.e1.nwie.net"
+            alpsurl1=$(sed 's/[[:space:]]//g' <<< $labip)
+            echo " +++   alpsip:" $alpsip   >> $LOGFILE
+            echo " +++ alpshost:" $alpshost >> $LOGFILE
+            echo " +++  alpsurl:" $alpsurl  >> $LOGFILE
+            echo " +++ alpsurl1:" $alpsurl1  >> $LOGFILE
+            #
+            # create cert & key in appropriate directory
+            cd /AnalyticLabPortalService/app/
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout alpskey.key -out alpscert.pem -subj "/C=US/ST=Ohio/L=Columbus/O=Nationwide/OU=ECTO/CN=$alpsip"
+
+            # Configure auto copy portal data to S3 on shutdown on rc.shutdown
+            echo "#!/bin/sh -x"        > /etc/rc.shutdown 
+            echo "#"                  >> /etc/rc.shutdown 
+            echo "# rc.shutdown"      >> /etc/rc.shutdown 
+            echo "# Auto-copy to  S3" >> /etc/rc.shutdown 
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.day2        s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.day3        --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.day2 s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.day3 --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.day1        s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.day2        --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.day1 s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.day2 --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.config      s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.day1        --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.json s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.day1 --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp /AnalyticLabPortalService/app/portal.config      s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/ --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "aws s3 cp /AnalyticLabPortalService/app/portal-access.json s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/ --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            # echo "find /var/log/alps.log* -type f -atime +7 -exec rm {} \\;" >> /etc/rc.shutdown
+            echo "aws s3 cp /var/log/ s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/Logs/ --recursive --exclude \"*\" --include \"alps.log*\" --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.shutdown
+            echo "exit 0"             >> /etc/rc.shutdown 
+            chmod a+x /etc/rc.shutdown
+
+            # Configure auto copy on startup of portal configuration files (doesn't run on initial build)
+            echo "# Auto-update Portal Software and restore config from S3" >> /etc/rc.d/rc.local
+            echo "cd /lab/Self-Service-Analytics"  >> /etc/rc.d/rc.local
+            echo "git reset --hard"  >> /etc/rc.d/rc.local
+            echo "git pull"  >> /etc/rc.d/rc.local
+            echo "cp -rf /lab/Self-Service-Analytics/PortalCode/. /AnalyticLabPortalService"  >> /etc/rc.d/rc.local
+            echo "chmod +x /lab/Self-Service-Analytics/PortalScripts/*" >> /etc/rc.d/rc.local 
+            echo "aws s3 sync /lab/Self-Service-Analytics/LabInstances/ s3://alps-s3-${AWS::Region}-${AWS::AccountId}/LabInstances/ --sse aws:kms --sse-kms-key-id ${pKMSid} --delete" >> /etc/rc.d/rc.local
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal.config      /AnalyticLabPortalService/app/ --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.d/rc.local 
+            echo "aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.json /AnalyticLabPortalService/app/ --sse aws:kms --sse-kms-key-id ${pKMSid}" >> /etc/rc.d/rc.local 
+            echo "chkconfig --add AnalyticLabPortalService.sh" >> /etc/rc.d/rc.local
+            echo "chkconfig AnalyticLabPortalService.sh on" >> /etc/rc.d/rc.local
+
+            #
+            # copy init.d rc.shutdown into place, setup links and initiailize
+            cp /lab/Self-Service-Analytics/LabInstances/Config/rclab.service /usr/lib/systemd/system/rclab.service
+            chmod a+r /usr/lib/systemd/system/rclab.service
+            systemctl start rclab
+            systemctl enable rclab
+
+            #
+            # If this was an update to an existing deployment need to restore portal configs - otherwise the following line wil do nothing (i.e. cause no harm)
+            #
+            aws s3 cp s3://alps-s3-${AWS::Region}-${AWS::AccountId}/PortalData/PortalConfig/portal-access.json /AnalyticLabPortalService/app/ --sse aws:kms --sse-kms-key-id ${pKMSid} >> $LOGFILE
+
+            #
+            # Setup SSL Install nginx, configure portal and nginx
+            #
+            yum install epel-release -y >> $LOGFILE
+            yum install nginx -y >> $LOGFILE
+            echo "server {"                                                                > /etc/nginx/conf.d/portal.conf
+            echo "        listen 443 ssl;"                                                >> /etc/nginx/conf.d/portal.conf
+            echo "        ssl_certificate /AnalyticLabPortalService/app/alpscert.pem;"    >> /etc/nginx/conf.d/portal.conf
+            echo "        ssl_certificate_key /AnalyticLabPortalService/app/alpskey.key;" >> /etc/nginx/conf.d/portal.conf
+            echo "        server_name $alpsurl;"                                          >> /etc/nginx/conf.d/portal.conf
+            echo "        location / {"                                                   >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_pass http://localhost:5000;"                         >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_redirect https://localhost:5000 \$scheme://\$server_name;" >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_http_version 1.1;"                                   >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_set_header Upgrade \$http_upgrade;"                  >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_set_header Connection \$connection_upgrade;"         >> /etc/nginx/conf.d/portal.conf
+            echo "             proxy_read_timeout 20d;"                                   >> /etc/nginx/conf.d/portal.conf
+            echo "        }"                                                              >> /etc/nginx/conf.d/portal.conf
+            echo "}"                                                                      >> /etc/nginx/conf.d/portal.conf
+            #
+            cp -f  /lab/Self-Service-Analytics/LabInstances/Config/nginx.conf /etc/nginx/nginx.conf
+
+            #Run Start Script
+            /AnalyticLabPortalService.sh
+            #
+            # Let's shutdown and restart 5 min. after initial build
+            shutdown -r +5 "Server will shutdown then restart in 5 minutes"
+
+  rTGWeb:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: webEC2-tg
+      VpcId: !ImportValue oVPCID
+      Port: 443
+      Protocol: HTTPS
+      Targets:
+      - Id: !Ref rEC2Instance
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 60
+      HealthCheckPath: /
+#      HealthCheckProtocol: HTTP
+      HealthCheckProtocol: HTTPS
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: '30'
+
+  rWebRuleDirect:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref pWebListener
+      Priority: 45000
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Ref pCommonName
+      Actions:
+        - TargetGroupArn: !Ref rTGWeb
+          Type: forward

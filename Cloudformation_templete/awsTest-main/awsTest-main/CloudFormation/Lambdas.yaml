@@ -1,0 +1,155 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates Lambda and role to run as
+Parameters:
+   pOwner:
+    Description: Owner's Name
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+  pEmail:
+    Description: Owner's e-Mail'
+    AllowedPattern: ^([A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,3})?$
+    Type: String
+  pResourceName:
+    Description: Name for the Resource
+    AllowedPattern: ^([A-Za-z0-9]*)?$
+    Type: String
+
+  pTimestamp:
+    Description: Timestamp for current build
+    Type: String
+  pSourceBucket:
+    Description: Name of bucket containing zipped lambda
+    Type: String
+  pPipelineName:
+    Description: Name of pipeline
+    Type: String
+  pALBarn:
+    Description: Arn of ALB
+    Type: String
+
+Resources:
+  rLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${pResourceName}-LAMBDA-${AWS::Region}-${AWS::AccountId}-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS: !Sub ${AWS::AccountId}
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: !Sub ${pResourceName}-LAMBDA-${AWS::Region}-${AWS::AccountId}-policy
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            -
+              Action:
+                - 'logs:CreateLogGroup'
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+              Effect: Allow
+              Resource: "*"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+  rDataNetworkCheck:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      Code:
+        S3Bucket: !Ref pSourceBucket
+        S3Key: !Sub ${pPipelineName}/artifacts/${pTimestamp}/DataNetworkCheck.zip
+      FunctionName: !Sub ${pResourceName}-DNC-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      Timeout: 300
+      Role: !GetAtt rLambdaRole.Arn
+      Tags:
+        - Key: Owner
+          Value: !Ref pOwner
+        - Key: Email
+          Value: !Ref pEmail
+        - Key: ResourceName
+          Value: !Sub ${pResourceName}-DNC-Lambda-${AWS::Region}-${AWS::AccountId}
+
+rUpdateConfig:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.8
+      Code:
+        S3Bucket: !Ref pSourceBucket
+        S3Key: !Sub ${pPipelineName}/artifacts/${pTimestamp}/UpdateConfig.zip
+      FunctionName: !Sub ${pResourceName}-UCFG-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      Timeout: 300
+      Role: !GetAtt rLambdaRole.Arn
+      Tags:
+        - Key: Owner
+          Value: !Ref pOwner
+        - Key: Email
+          Value: !Ref pEmail
+        - Key: ResourceName
+          Value: !Sub ${pResourceName}-UCFG-Lambda-${AWS::Region}-${AWS::AccountId}
+
+ALBDNC:
+    Type: AWS::Lambda::Permission
+    DependsOn: rDataNetworkCheck
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${pResourceName}-DNC-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      Principal: elasticloadbalancing.amazonaws.com
+
+ALBUCFG:
+    Type: AWS::Lambda::Permission
+    DependsOn: rUpdateConfig
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${pResourceName}-UCFG-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      Principal: elasticloadbalancing.amazonaws.com
+
+rTGDNC:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: ALBDNC
+    Properties:
+      Name: lambda-tg-DataNetworkCheck
+#      Port: 80
+#      Protocol: HTTP
+      Targets:
+      - Id: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${pResourceName}-DNC-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      TargetType: lambda
+
+rTGUCFG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: ALBUCFG
+    Properties:
+      Name: lambda-tg-UpdateConfig
+#      Port: 80
+#      Protocol: HTTP
+      Targets:
+      - Id: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${pResourceName}-UCFG-LAMBDA-${AWS::Region}-${AWS::AccountId}
+      TargetType: lambda
+
+ rDNCListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref pALBarn
+      Port: 95
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref rTGDNC
+
+ rUCFGListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref pALBarn
+      Port: 95
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref rTGUCFG

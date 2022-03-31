@@ -1,0 +1,191 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<script type="text/javascript" src="/static/css/sort-table.js"></script>
+<style>
+  .tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 0px dotted black;
+  }
+  
+  .tooltip .tooltiptext {
+    visibility: hidden;
+    background-color: black;
+    color: #fff;
+    width: 400px;
+    text-align: left;
+    border-radius: 6px;
+    padding: 5px 0;
+  
+    /* Position the tooltip */
+    position: absolute;
+    z-index: 1;
+    top: -5px;
+    right: 105%;
+  }
+  .tooltip:hover .tooltiptext {
+    visibility: visible;
+  }
+
+    /* Position the tooltipx */
+  .tooltipx {
+    position: relative;
+    display: inline-block;
+    border-bottom: 0px dotted black;
+  }
+  
+  .tooltipx .tooltiptext {
+    visibility: hidden;
+    background-color: black;
+    color: #fff;
+    width: 400px;
+    text-align: left;
+    border-radius: 6px;
+    padding: 5px 0;
+  
+    /* Position the tooltip */
+    position: absolute;
+    z-index: 1;
+    display: block;
+    top: -5px;
+    left: 105%;
+  }
+  .tooltipx:hover .tooltiptext {
+    visibility: visible;
+  }
+</style>
+
+  <h2>Simple Alert Federation Environment</h2>
+  <h2>Interface</h2>
+  <h3>{{ userole }}: {{ nwieid }}</h3>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      {% for message in messages %}
+        <center><font style="color: red; background-color: black; font-size: large;">{{ message }}</font></center>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+<form action="" method="POST">
+
+  <h2>Alert Messages</h2>
+<!---  <table id="servertable" class="hoverTable"> -->
+  <div>
+    <table id="alert-table" data-lastrowadded="0">
+      <thead>
+        <tr class="first-row">
+          <th>NWS ID</th>
+          <th>Location</th>
+          <th>Subject</th>
+          <th>Effective</th>
+          <th>Expires</th>
+          <th>Message</th>
+          <th>Instructions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="alert-row">
+          <td class='nws-id'></td>
+          <td class='location'></td>
+          <td class='subject'></td>
+          <td class='effective'></td>
+          <td class='expires'></td>
+          <td class='message'></td>
+          <td class='instructions'></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</form>
+<script>
+  buildTable();
+
+  function showObjectKey(obj) {
+    var queryString = document.location.search;
+    var dict = JSON.parse(obj.replace(/'/g,"\""));
+    var result = " ";
+    for(var item in dict) {
+    	var key = item;
+      result += item + " ";
+    }
+    return result;
+  }
+
+  function showObjectValue(obj) {
+    var queryString = document.location.search;
+    var dict = JSON.parse(obj.replace(/'/g,"\""));
+    var result = " ";
+    for(var item in dict) {
+    	var key = item;
+      result += dict[item] + " ";
+    }
+    return result;
+  }
+
+  function comparer(index) {
+      return function(a, b) {
+        var valA = getCellValue(a, index),
+            valB = getCellValue(b, index);
+      return $.isNumeric(valA) && $.isNumeric(valB) ? valA - valB : valA.localeCompare(valB);
+    }
+  }
+  
+  function getCellValue(row, index) {
+    return $(row).children('td').eq(index).text();
+  }
+
+  $("#sort").on("change", function(event) {
+    var pickedValue = event.target.value;
+    $('#alert-table').find('.first-row').find('th').eq(pickedValue).trigger('click');
+    //  console.log(pickedValue);
+  });
+  
+  $('#alert-table').on('click', 'th', function() {
+    var table = $(this).closest('table');
+    var rows = table.find('tr.alert-row')
+      .toArray()
+      .sort(comparer($(this).index()));
+    this.asc = !this.asc;
+    if (!this.asc) {
+      rows = rows.reverse();
+    }
+    for (var i = 0; i < rows.length; i++) {
+      table.append(rows[i]);
+    }
+  });
+
+  function buildTable(){
+    $.getJSON( "{{ listapi }}", function(data) {
+
+    // get first row,clone it then remove it
+    var firstRow = $("#alert-table")
+      .find('tbody')
+      .find('.alert-row')
+      .first().hide();
+    var cloneRow = firstRow.clone(true).data('last-row-counter', 0).show();
+    firstRow.remove();
+
+    var tr;
+    $('tbody').empty();
+    for (var i = 0; i < data.length; i++) {
+      tr = $('<tr>');
+      tr.append("<td style=\"text-align: center; color:blue;\"> <div class=\"tooltipx\"> ID <span class=\"tooltiptext\">" + data[i].id + "</span></div></td>");
+      tr.append("<td style=\"text-align: center; color:blue;\"> <div class=\"tooltipx\"> " + showObjectKey(data[i].location) + " <span class=\"tooltiptext\">" + showObjectValue(data[i].location) + "</span></div></td>");
+      tr.append("<td>" + data[i].subject + "</td>");
+      tr.append("<td>" + data[i].effective + "</td>");
+      tr.append("<td>" + data[i].expires + "</td>");
+      tr.append("<td style=\"text-align: center; color:blue;\"> <div class=\"tooltip\"> Message <span class=\"tooltiptext\">" + data[i].message + "</span></div></td>");
+      tr.append("<td style=\"text-align: center; color:blue;\"> <div class=\"tooltip\"> Instructions <span class=\"tooltiptext\">" + data[i].instructions + "</span></div></td>");
+      tr.append("</tr>");
+      $('tbody').append(tr);
+    }
+    tr = $('<tr>');
+    $('tbody').append(tr);
+    setTimeout(buildTable, 20000);
+  });
+  }
+</script>
+
+{% endblock %}
