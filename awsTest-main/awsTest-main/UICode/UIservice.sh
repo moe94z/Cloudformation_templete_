@@ -5,7 +5,7 @@
 # chkconfig: - 85 15
 # description: This script starts and stops the Simple UI Environment Script
 #
-# Author: Tim Hessing
+# Author: Mohamad Quteifan
 # Created: 03-13-2022
 # Updated: 03-13-2022
 #
